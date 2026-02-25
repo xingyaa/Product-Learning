@@ -1,0 +1,14 @@
+# RASP 命令注入演示：运维诊断页，exec 结果回显到前端，便于 RASP 检测
+# 访问: http://<主机>:9093/
+services:
+  rasp-demo:
+    build: .
+    image: rasp-demo:latest
+    ports:
+      - "9093:8080"
+    restart: unless-stopped
+    # 若需挂 RASP agent，示例（按实际 agent 路径修改）:
+    # environment:
+    #   JAVA_TOOL_OPTIONS: "-javaagent:/path/to/rasp-agent.jar"
+    # volumes:
+    #   - /path/to/rasp-agent.jar:/path/to/rasp-agent.jar:ro

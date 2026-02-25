@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>企业协同办公平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f0f2f5;
+      --card: #fff;
+      --card-border: #e8e8e8;
+      --text: #1f2937;
+      --text-muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --radius: 8px;
+      --font: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      /* 图表网格与留白（4 的倍数，告别硬编码） */
+      --grid: 8px;
+      --space-4: 4px;
+      --space-8: 8px;
+      --space-12: 12px;
+      --space-16: 16px;
+      --space-24: 24px;
+      --stroke: 2px;
+      --radius-node: 8px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); }
+    .app { display: flex; min-height: 100vh; }
+    .nav {
+      width: 200px; background: #1e3a5f; color: #e5e7eb; padding: 1rem 0; flex-shrink: 0;
+    }
+    .nav-item { display: block; width: 100%; text-align: left; padding: 0.5rem 1.25rem; color: #b8c5d6; cursor: pointer;
+      background: none; border: none; border-left: 3px solid transparent; font: inherit; font-size: 14px; }
+    .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+    .nav-item.active { background: rgba(37,99,235,0.3); color: #fff; border-left-color: var(--accent); padding-left: calc(1.25rem - 3px); }
+    .main { flex: 1; padding: 1.5rem 2rem; overflow: auto; }
+    .top-bar { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--card-border); }
+    .top-bar h1 { margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text); }
+    .card {
+      background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius);
+      padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .card h2 { margin: 0 0 0.75rem 0; font-size: 1rem; font-weight: 600; color: var(--text); }
+    .form-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .form-row input {
+      flex: 1; min-width: 180px; padding: 0.5rem 0.75rem; border: 1px solid var(--card-border);
+      border-radius: 6px; font-family: inherit; font-size: 0.9rem;
+    }
+    .form-row input:focus { outline: none; border-color: var(--accent); }
+    .btn {
+      padding: 0.5rem 1rem; border: none; border-radius: 6px; font-family: inherit; font-size: 0.9rem;
+      font-weight: 500; cursor: pointer; background: var(--accent); color: #fff;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-ghost { background: #f3f4f6; color: var(--text); }
+    .btn-ghost:hover { background: #e5e7eb; }
+    .result-box {
+      margin-top: 0.75rem; padding: 0.75rem; background: #f9fafb; border-radius: 6px;
+      border: 1px solid var(--card-border); font-family: ui-monospace, monospace; font-size: 0.8rem;
+      white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow-y: auto;
+    }
+    .result-box:empty { display: none; }
+    .result-box.loading { color: var(--text-muted); }
+    .incident { border-color: var(--danger); background: var(--danger-bg); }
+    .incident h2 { color: var(--danger); }
+    .step { margin: 0.75rem 0; padding-left: 1rem; border-left: 3px solid var(--accent); }
+    .step strong { color: var(--accent); }
+    .step p { margin: 0.2rem 0 0 0; color: var(--text-muted); font-size: 0.85rem; }
+    .leaked {
+      margin-top: 0.75rem; padding: 0.6rem; background: #fff; border-radius: 6px; border: 1px solid var(--card-border);
+      font-family: ui-monospace, monospace; font-size: 0.75rem; white-space: pre-wrap;
+      max-height: 160px; overflow-y: auto; color: var(--danger);
+    }
+    .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .announce-list { list-style: none; padding: 0; margin: 0; }
+    .announce-list li { padding: 0.5rem 0; border-bottom: 1px solid var(--card-border); }
+    .shortcuts { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .shortcut { padding: 0.75rem 1rem; background: #f9fafb; border-radius: var(--radius); border: 1px solid var(--card-border); text-decoration: none; color: var(--text); min-width: 100px; text-align: center; }
+    .shortcut:hover { border-color: var(--accent); color: var(--accent); }
+    .sub-nav { margin-bottom: 1rem; }
+    .sub-nav a { margin-right: 1rem; color: var(--text-muted); text-decoration: none; }
+    .sub-nav a:hover, .sub-nav a.active { color: var(--accent); }
+    .attack-panel {
+      margin-top: 1.5rem; padding: 1rem; background: #fffbeb; border: 1px solid #f59e0b; border-radius: var(--radius);
+    }
+    .attack-panel summary { cursor: pointer; font-weight: 600; color: #92400e; }
+    .attack-panel .attack-steps { margin-top: 0.75rem; }
+    .attack-panel code { font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 4px; }
+    .internal-links { margin-top: 0.75rem; padding: 0.5rem; background: #fef2f2; border-radius: 6px; font-size: 0.85rem; }
+    .internal-links dt { font-weight: 600; color: var(--danger); margin-top: 0.5rem; }
+    .internal-links dd { margin: 0.2rem 0 0 0. }
+    .attack-demo-layout { display: flex; gap: 1.5rem; margin-top: 0.5rem; }
+    .attack-sidebar { width: 180px; flex-shrink: 0; }
+    .attack-sidebar a { display: block; padding: 0.5rem 0.75rem; margin-bottom: 0.25rem; border-radius: 6px; color: var(--text); text-decoration: none; }
+    .attack-sidebar a:hover { background: #f3f4f6; color: var(--accent); }
+    .attack-sidebar a.active { background: rgba(37,99,235,0.1); color: var(--accent); font-weight: 500; }
+    .attack-content { display: none; flex: 1; min-width: 0; }
+    .attack-content.active { display: block; }
+    .attack-content .card:first-child { margin-top: 0; }
+    .coming-soon { padding: 2rem; text-align: center; color: var(--text-muted); background: #f9fafb; border-radius: var(--radius); border: 1px dashed var(--card-border); }
+    /* 内存马动态图：Flex 布局 + 设计 token，无硬编码对齐 */
+    .diagram-section { margin-top: var(--space-16); margin-bottom: var(--space-24); }
+    .diagram-section h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0 0 var(--space-12) 0; font-family: var(--font); }
+    .diagram-box {
+      background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: var(--space-24);
+      overflow: hidden;
+      animation: diagram-enter 0.5s ease-out forwards;
+    }
+    @keyframes diagram-enter {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .diagram-legend { margin-top: var(--space-12); font-size: 0.8rem; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: var(--space-16); font-family: var(--font); }
+    .diagram-legend span { display: inline-flex; align-items: center; gap: var(--space-4); }
+    .diagram-legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .diagram-legend .dot.normal { background: #2563eb; }
+    .diagram-legend .dot.evil { background: #dc2626; }
+    .diagram-legend .dot.memory { background: #4f46e5; }
+    /* 图1：左右对比 — Flex 等分，框内 flex 居中 */
+    .d-compare {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: var(--space-24);
+      flex-wrap: wrap;
+    }
+    .d-panel {
+      flex: 1;
+      min-width: 200px;
+      max-width: 280px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-8);
+    }
+    .d-panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: var(--font);
+      text-align: center;
+      line-height: 1.3;
+    }
+    .d-panel-box {
+      width: 100%;
+      padding: var(--space-16);
+      border-radius: var(--radius-node);
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-12);
+      justify-content: center;
+      align-items: center;
+      min-height: 120px;
+    }
+    .d-panel-box.normal { background: #eff6ff; border: var(--stroke) solid #2563eb; }
+    .d-panel-box.evil { background: #fef2f2; border: var(--stroke) solid #dc2626; }
+    .d-node {
+      padding: var(--space-12) var(--space-16);
+      border-radius: var(--radius-node);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.3;
+      border: var(--stroke) solid;
+      min-width: 72px;
+    }
+    .d-node.normal { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
+    .d-node.evil { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+    .d-node.evil.pulse { animation: node-pulse 2.2s ease-in-out infinite; }
+    @keyframes node-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.88; } }
+    .d-panel-caption {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      font-family: var(--font);
+      line-height: 1.3;
+    }
+    .d-arrow-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      gap: var(--space-4);
+    }
+    .d-arrow-wrap span { font-size: 11px; color: var(--text-muted); font-family: var(--font); }
+    /* 图2：流程列 — 垂直 Flex，每格等距 */
+    .d-flow-row {
+      display: flex;
+      align-items: stretch;
+      gap: var(--space-24);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .d-flow-col {
+      flex: 1;
+      min-width: 200px;
+      max-width: 280px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .d-flow-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: var(--space-8);
+      font-family: var(--font);
+      text-align: center;
+    }
+    .d-flow-node {
+      width: 100%;
+      padding: var(--space-16);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.3;
+      border: var(--stroke) solid;
+      border-radius: var(--radius-node);
+      box-sizing: border-box;
+    }
+    .d-flow-node.normal { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
+    .d-flow-node.evil { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+    .d-flow-node.memory { background: #e0e7ff; border-color: #4f46e5; color: #3730a3; }
+    .d-flow-arrow {
+      padding: var(--space-4) 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .d-flow-caption {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: var(--space-12);
+      font-family: var(--font);
+      line-height: 1.3;
+    }
+    /* 图3：步骤条 — 水平 Flex，框内双行 flex 居中 */
+    .d-steps-wrap { display: flex; flex-direction: column; gap: var(--space-12); }
+    .d-steps-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      justify-content: center;
+      gap: var(--space-12);
+    }
+    .d-step-node {
+      padding: var(--space-16) var(--space-20);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-4);
+      border-radius: var(--radius-node);
+      border: var(--stroke) solid;
+      min-width: 120px;
+      transition: opacity 0.35s ease, filter 0.35s ease, transform 0.25s ease;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    .d-step-node:hover { transform: scale(1.03); }
+    .d-step-node.dim { opacity: 0.4; filter: grayscale(0.5); }
+    .d-step-node.highlight { filter: drop-shadow(0 2px 8px rgba(37,99,235,0.35)); }
+    .d-step-num { font-size: 12px; font-weight: 600; font-family: var(--font); line-height: 1.2; }
+    .d-step-desc { font-size: 11px; color: var(--text-muted); font-family: var(--font); line-height: 1.2; text-align: center; }
+    .d-step-arrow { display: flex; align-items: center; flex-shrink: 0; }
+    .d-step-node.step-0 { background: #dbeafe; border-color: #2563eb; }
+    .d-step-node.step-0 .d-step-num { color: #1e40af; }
+    .d-step-node.step-evil { background: #fee2e2; border-color: #dc2626; }
+    .d-step-node.step-evil .d-step-num { color: #991b1b; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav class="nav" id="main-nav">
+      <button type="button" class="nav-item active" data-page="work">工作台</button>
+      <button type="button" class="nav-item" data-page="attack">攻击演示</button>
+      <button type="button" class="nav-item" data-page="settings">系统设置</button>
+      <button type="button" class="nav-item" data-page="help">帮助与反馈</button>
+    </nav>
+    <main class="main">
+      <div id="work" class="page active">
+        <div class="top-bar"><h1>工作台</h1></div>
+        <div class="card">
+          <h2>公告</h2>
+          <ul class="announce-list">
+            <li>【系统】本周六 00:00–02:00 例行维护，请提前保存工作。</li>
+            <li>【行政】春节放假通知已发布，请查收。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>快捷入口</h2>
+          <div class="shortcuts">
+            <a class="shortcut" href="#/attack">攻击演示</a>
+            <a class="shortcut" href="#/settings">系统设置</a>
+            <a class="shortcut" href="#/help">帮助与反馈</a>
+          </div>
+        </div>
+      </div>
+
+      <div id="attack" class="page">
+        <div class="top-bar"><h1>攻击演示</h1></div>
+        <p class="hint" style="margin-bottom:1rem;">按攻击类型分类，选择左侧场景进入对应演示。后续可在此增加更多攻击类型。</p>
+        <div class="attack-demo-layout">
+          <nav class="attack-sidebar">
+            <a href="#/attack/command-injection" data-attack="command-injection">命令注入</a>
+            <a href="#/attack/memory-shell" data-attack="memory-shell">内存马注入</a>
+            <a href="#/attack/xss" data-attack="xss">XSS跨站脚本</a>
+            <a href="#/attack/ssrf" data-attack="ssrf">SSRF服务端请求伪造</a>
+          </nav>
+          <div id="attack-content-command-injection" class="attack-content">
+            <div class="card">
+              <h2>命令注入（OA 发件服务器测试 API）</h2>
+              <p class="hint">模拟 OA 系统「邮件与通知」中的发件服务器连接测试接口，因未对 SMTP 地址做校验，导致用户输入被拼入 shell 执行，形成命令注入。含完整攻击路径演示（信息泄露 → 越权 → 命令注入）。</p>
+              <p style="margin-top:0.75rem;"><a href="#/diagnostic" class="btn">进入命令注入演示</a></p>
+            </div>
+          </div>
+          <div id="attack-content-memory-shell" class="attack-content">
+            <div class="card">
+              <h2>内存马注入（OA 数据导入 → JVM 内存中的「秘密后门」）</h2>
+              <p class="hint">通俗讲，<strong>内存马</strong>就是攻击者在 <strong>JVM 进程内存里</strong>留下的一扇「秘密后门」——后门逻辑本身不落盘、无文件，杀毒和文件扫描很难发现；攻击者通过隐藏地址传入命令，由<strong> JVM 进程在内存中调用 exec</strong> 真实执行（如读取配置文件），结果回传。下方先说明正常应用如何通过 JVM 启动，以及黑客如何利用并注入内存马。</p>
+              <div class="diagram-section">
+                <h3>📌 一张图理解：正常 JVM  vs  被注入内存马后的 JVM</h3>
+                <div class="diagram-box">
+                  <div class="d-compare">
+                    <div class="d-panel">
+                      <div class="d-panel-title">正常 JVM 进程内存</div>
+                      <div class="d-panel-box normal">
+                        <span class="d-node normal">业务 Servlet</span>
+                        <span class="d-node normal">Controller</span>
+                        <span class="d-node normal">Filter 等</span>
+                      </div>
+                      <div class="d-panel-caption">仅合法业务，无后门</div>
+                    </div>
+                    <div class="d-arrow-wrap">
+                      <svg width="32" height="24" viewBox="0 0 32 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M2 12 L24 12 M20 8 L28 12 L20 16"/></svg>
+                      <span>注入后</span>
+                    </div>
+                    <div class="d-panel">
+                      <div class="d-panel-title">被注入后的 JVM 内存</div>
+                      <div class="d-panel-box evil">
+                        <span class="d-node evil">业务</span>
+                        <span class="d-node evil pulse">内存马后门</span>
+                        <span class="d-node evil">隐藏路径 + exec(cmd)</span>
+                      </div>
+                      <div class="d-panel-caption">无文件落地，扫描难发现</div>
+                    </div>
+                  </div>
+                  <div class="diagram-legend">
+                    <span><span class="dot normal"></span> 正常组件</span>
+                    <span><span class="dot evil"></span> 内存马（攻击者注入）</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>正常应用如何通过 JVM 启动 · 黑客如何利用 JVM 内存马</h2>
+              <p><strong>正常启动：</strong> OA 等 Java 应用以 jar/class 部署，启动时由操作系统拉起 <strong>JVM 进程</strong>（Java 虚拟机）。JVM 从磁盘加载 class 到内存，执行 main，启动 Web 容器并监听端口，所有业务逻辑运行在<strong>同一 JVM 进程的内存空间</strong>内；每次请求由该进程内的 Servlet/Controller 等处理。</p>
+              <p style="margin-top:0.75rem;"><strong>黑客如何利用、如何知道能注入：</strong> 攻击者通过漏洞（如数据导入的<strong>反序列化</strong>、文件上传 RCE）在<strong>已运行的 JVM 进程</strong>中执行恶意代码。该代码在<strong>内存中</strong>动态注册 Filter、Servlet 或添加 URL 映射，<strong>不向磁盘写任何文件</strong>，因此传统杀软和文件监控难以发现。攻击者如何「知道」能注入：通过信息收集与漏洞利用——发现目标存在可触发的反序列化入口（如导入接口）、已知漏洞的依赖库等，构造恶意 payload 上传或提交，在服务端解析时触发 RCE，再在 RCE 中执行「向当前 JVM 注册隐藏后门」的代码，即完成内存马注入。</p>
+              <div class="diagram-section">
+                <h3>📌 动态对比：正常启动流程  vs  攻击利用流程</h3>
+                <div class="diagram-box">
+                  <div class="d-flow-row">
+                    <div class="d-flow-col">
+                      <div class="d-flow-title">正常应用启动</div>
+                      <div class="d-flow-node normal">磁盘 jar/class</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#64748b" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node memory">JVM 进程启动</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#64748b" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node normal">Web 容器 + 业务</div>
+                      <div class="d-flow-caption">合法请求 → 业务处理</div>
+                    </div>
+                    <div class="d-flow-col">
+                      <div class="d-flow-title">攻击利用流程</div>
+                      <div class="d-flow-node evil">攻击者 · 恶意 payload</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#dc2626" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node evil">数据导入/反序列化 RCE</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#dc2626" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node evil pulse">内存中注入后门（无文件）</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#dc2626" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node evil">传 cmd → exec → 回传</div>
+                      <div class="d-flow-caption">隐藏路径访问，窃取数据</div>
+                    </div>
+                  </div>
+                  <div class="diagram-legend">
+                    <span><span class="dot normal"></span> 正常组件</span>
+                    <span><span class="dot evil"></span> 攻击/后门</span>
+                    <span><span class="dot memory"></span> JVM/内存</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>攻击路径演示（原理 + 技术表述）</h2>
+              <div class="step"><strong>步骤 0 · 攻击者如何访问到 OA</strong><p>与命令注入相同：通过钓鱼、社工等拿到员工 OA 登录态，以该身份访问内网 OA。</p></div>
+              <div class="step"><strong>步骤 1 · OA「数据导入」存在可被利用的漏洞</strong><p>OA 的审批/Excel 导入等接口在解析上传文件时<strong>未严格校验</strong>，攻击者伪造「假文件」内藏恶意指令（技术上多为<strong>反序列化漏洞</strong>：服务器将数据还原成对象时触发恶意逻辑），解析时即获得在服务端执行任意代码的能力（RCE）。</p></div>
+              <div class="step"><strong>步骤 2 · 在 JVM 内存中注入后门，无文件落地</strong><p>攻击者利用 RCE 在<strong>当前 JVM 进程的内存</strong>中植入后门逻辑（如动态注册一个绑定到隐藏路径的 Servlet/Filter），<strong>不新建任何磁盘文件</strong>，故文件扫描无法发现；只要 OA 进程不重启，该后门常驻内存并可被访问。这类「仅存在于 JVM 内存、不落盘的后门」即<strong>内存马</strong>。</p></div>
+              <div class="step"><strong>步骤 3 · 通过后门触发 exec，真实执行命令并窃取数据</strong><p>攻击者向隐藏地址传入命令参数（如 <code>cmd=cat /app/config/application.properties</code>），内存马逻辑在 JVM 进程内<strong>调用 Runtime.exec(cmd)</strong>，由操作系统在容器内<strong>真实执行</strong>该命令（如启动子进程执行 cat 读取配置文件），并将标准输出回传。因此：<strong>内存马</strong>指「JVM 进程内存中的后门逻辑」；<strong>命令执行</strong>由该逻辑调 exec 完成，执行结果（如配置文件内容）即攻击者窃取到的数据。下方演示假设内存马已注入，模拟上述「传 cmd → JVM 调 exec 执行 → 回传结果」的过程。</p></div>
+              <div class="diagram-section steps-diagram">
+                <h3>📌 攻击路径一览（点击步骤框可高亮）</h3>
+                <div class="diagram-box">
+                  <div class="d-steps-wrap">
+                    <div class="d-steps-row">
+                      <div class="d-step-node step-node step-0" data-step="0" id="stepNode0" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 0</span>
+                        <span class="d-step-desc">访问 OA</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="1" id="stepNode1" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 1</span>
+                        <span class="d-step-desc">导入漏洞 RCE</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="2" id="stepNode2" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 2</span>
+                        <span class="d-step-desc">内存注入后门</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="3" id="stepNode3" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 3</span>
+                        <span class="d-step-desc">exec 窃取</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>内存马访问演示（假设已注入）</h2>
+              <p class="hint"><strong>技术对应：</strong> 本演示中，内存马 = JVM 进程内「通过隐藏路径接收 <code>cmd</code> 并调用 <code>Runtime.exec(cmd)</code>」的那段逻辑；下方输入框传入的命令会在服务端<strong>被真实执行</strong>（JVM 在内存中调 exec，子进程读文件等），执行结果即为攻击者窃取到的内容。</p>
+              <p class="hint">可尝试「执行窃取演示」查看通过 exec 读取配置文件后的回传结果。</p>
+              <div class="form-row">
+                <input type="text" id="memCmd" placeholder="输入要执行的命令，如 id 或 cat /app/config/application.properties" value="id">
+                <button type="button" class="btn" id="memRun">执行</button>
+                <button type="button" class="btn btn-ghost" id="memDemo">执行窃取演示（配置/密钥）</button>
+              </div>
+              <p class="hint" style="margin-top:0.5rem;"><strong>执行</strong>：执行当前输入框中的命令（可随意修改）。<strong>执行窃取演示</strong>：一键填入并执行「读取应用配置」命令，用于演示攻击者通过内存马窃取配置与密钥的场景。</p>
+              <div class="result-box" id="memOutput"></div>
+            </div>
+            <div class="card incident" id="memIncidentCard" style="display:none;">
+              <h2>⚠️ 安全事件说明（内存马）</h2>
+              <p style="margin-bottom:0.5rem;"><strong>本安全事件由 OA 数据导入漏洞导致的内存马注入与滥用。</strong></p>
+              <p class="hint" style="margin-bottom:0.5rem;"><strong>技术说明：</strong> 本事件中，<strong>内存马</strong> = 攻击者注入在 <strong>JVM 进程内存</strong>中的后门逻辑（通过隐藏路径接收 <code>cmd</code> 并调用 <code>Runtime.exec(cmd)</code>），该逻辑无对应磁盘文件。攻击者传入的命令在服务端被 <strong>JVM 在内存中调用 exec</strong> 后<strong>真实执行</strong>（如由子进程执行 cat 读取配置文件），输出回传。下方「攻击者窃取到的内容」即为本次 exec 执行后的标准输出（如配置文件、密钥等）。</p>
+              <div class="step"><strong>攻击者窃取到的内容</strong><p id="memStep1"></p></div>
+              <div class="leaked" id="memLeaked"></div>
+            </div>
+          </div>
+          <div id="attack-content-xss" class="attack-content">
+            <div class="card">
+              <h2>XSS 跨站脚本（反射型等）</h2>
+              <p class="hint">通俗讲，<strong>反射型 XSS</strong>就是攻击者把恶意脚本「塞进」一个链接或搜索参数里，服务端<strong>未经转义直接写回 HTML</strong>，受害者打开链接或看到结果页时，脚本在浏览器里执行，可窃取 Cookie、篡改页面等。模拟 OA「站内搜索」「意见反馈」场景：用户输入被服务端原样拼入响应（反射型 XSS）。RASP 可对响应输出做钩子或特征检测。</p>
+              <div class="diagram-section">
+                <h3>📌 一张图理解：正常搜索  vs  反射型 XSS</h3>
+                <div class="diagram-box">
+                  <div class="d-compare">
+                    <div class="d-panel">
+                      <div class="d-panel-title">正常搜索响应</div>
+                      <div class="d-panel-box normal">
+                        <span class="d-node normal">用户输入关键词</span>
+                        <span class="d-node normal">服务端转义后输出</span>
+                        <span class="d-node normal">页面仅展示文本</span>
+                      </div>
+                      <div class="d-panel-caption">无脚本执行</div>
+                    </div>
+                    <div class="d-arrow-wrap">
+                      <svg width="32" height="24" viewBox="0 0 32 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M2 12 L24 12 M20 8 L28 12 L20 16"/></svg>
+                      <span>漏洞时</span>
+                    </div>
+                    <div class="d-panel">
+                      <div class="d-panel-title">反射型 XSS 响应</div>
+                      <div class="d-panel-box evil">
+                        <span class="d-node evil">攻击者输入脚本</span>
+                        <span class="d-node evil pulse">服务端未转义写回 HTML</span>
+                        <span class="d-node evil">浏览器执行脚本</span>
+                      </div>
+                      <div class="d-panel-caption">窃取 Cookie / 篡改页面</div>
+                    </div>
+                  </div>
+                  <div class="diagram-legend">
+                    <span><span class="dot normal"></span> 正常</span>
+                    <span><span class="dot evil"></span> 攻击/反射</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>正常业务如何展示搜索 · 攻击者如何利用反射型 XSS</h2>
+              <p><strong>正常业务：</strong> OA 站内搜索：用户输入关键词，服务端<strong>转义</strong>后写入 HTML（如将 <code>&lt;</code> 转为 <code>&amp;lt;</code>），结果页只展示纯文本，脚本不会执行。</p>
+              <p style="margin-top:0.75rem;"><strong>攻击者如何利用：</strong> 若服务端<strong>未转义</strong>用户输入即拼入 HTML（接口 <code>/api/xss-demo?q=xxx</code>），攻击者构造链接如 <code>?q=&lt;script&gt;alert(document.cookie)&lt;/script&gt;</code>，诱使受害者点击；受害者打开后，服务端返回的页面中含该脚本，浏览器执行，即可窃取 Cookie 或篡改内容。下方演示假设接口存在反射，模拟「输入 → 服务端原样写回 → 结果展示」。</p>
+              <div class="diagram-section">
+                <h3>📌 动态对比：正常流程  vs  反射型 XSS 利用</h3>
+                <div class="diagram-box">
+                  <div class="d-flow-row">
+                    <div class="d-flow-col">
+                      <div class="d-flow-title">正常流程</div>
+                      <div class="d-flow-node normal">用户输入关键词</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#64748b" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node normal">服务端转义后输出</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#64748b" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node normal">页面仅展示文本</div>
+                      <div class="d-flow-caption">无脚本执行</div>
+                    </div>
+                    <div class="d-flow-col">
+                      <div class="d-flow-title">反射型 XSS 利用</div>
+                      <div class="d-flow-node evil">攻击者提交脚本</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#dc2626" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node evil">服务端未转义写回 HTML</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#dc2626" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node evil pulse">浏览器执行脚本</div>
+                      <div class="d-flow-caption">Cookie 窃取 / 篡改</div>
+                    </div>
+                  </div>
+                  <div class="diagram-legend">
+                    <span><span class="dot normal"></span> 正常</span>
+                    <span><span class="dot evil"></span> 攻击</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>攻击路径演示（原理 + 技术表述）</h2>
+              <div class="step"><strong>步骤 0 · 攻击者如何访问到 OA</strong><p>与命令注入相同：通过钓鱼、社工等拿到员工 OA 登录态，以该身份访问内网 OA 及站内搜索等入口。</p></div>
+              <div class="step"><strong>步骤 1 · OA 站内搜索/反馈接口未做输出转义</strong><p>OA 的站内搜索或意见反馈接口将用户输入的 <code>q</code> 直接拼入 HTML 响应，<strong>未做 HTML 转义</strong>，属 OA 自身 API 漏洞。</p></div>
+              <div class="step"><strong>步骤 2 · 攻击者构造恶意链接或表单</strong><p>攻击者将脚本作为参数（如 <code>q=&lt;script&gt;alert(1)&lt;/script&gt;</code>）放入链接或搜索框，诱使受害者点击或提交。</p></div>
+              <div class="step"><strong>步骤 3 · 服务端反射到 HTML，受害者浏览器执行脚本</strong><p>受害者打开链接后，服务端返回的页面中该参数被<strong>原样写回 HTML</strong>，浏览器解析时执行脚本，攻击者即可窃取 Cookie、篡改页面等。下方演示假设接口存在反射，模拟「输入 → 服务端写回 → 结果/预览」。</p></div>
+              <div class="diagram-section steps-diagram">
+                <h3>📌 攻击路径一览（点击步骤框可高亮）</h3>
+                <div class="diagram-box">
+                  <div class="d-steps-wrap">
+                    <div class="d-steps-row">
+                      <div class="d-step-node step-node step-0" data-step="0" id="xssStepNode0" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 0</span>
+                        <span class="d-step-desc">访问 OA</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="1" id="xssStepNode1" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 1</span>
+                        <span class="d-step-desc">接口未转义</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="2" id="xssStepNode2" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 2</span>
+                        <span class="d-step-desc">构造恶意链接</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="3" id="xssStepNode3" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 3</span>
+                        <span class="d-step-desc">反射执行</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>反射型 XSS 演示（假设接口存在反射）</h2>
+              <p class="hint"><strong>技术对应：</strong> 本演示中，服务端将参数 <code>q</code> <strong>未经转义</strong>直接拼入 HTML 响应（<code>/api/xss-demo?q=xxx</code>）；下方输入会原样写回，若输入脚本将在预览中执行。</p>
+              <p class="hint">可尝试「执行 XSS 演示」一键填入恶意脚本并查看反射与执行效果。</p>
+              <div class="form-row">
+                <input type="text" id="xssQuery" placeholder="输入关键词或恶意脚本，如 &lt;script&gt;alert('XSS')&lt;/script&gt;">
+                <button type="button" class="btn" id="xssRun">搜索</button>
+                <button type="button" class="btn btn-ghost" id="xssDemo">执行 XSS 演示</button>
+              </div>
+              <p class="hint" style="margin-top:0.5rem;"><strong>搜索</strong>：使用当前输入请求接口，结果在下方 result-box 与 iframe 预览中展示。<strong>执行 XSS 演示</strong>：一键填入反射型 XSS 脚本并请求，用于演示攻击效果。</p>
+              <div class="result-box" id="xssOutput"></div>
+              <p class="hint" style="margin-top:0.5rem;">服务端返回的页面预览（含未转义的反射内容，脚本会在 iframe 内执行）：</p>
+              <div class="result-box" style="min-height:80px; padding:0; overflow:hidden;">
+                <iframe id="xssFrame" title="XSS 响应预览" style="width:100%; height:120px; border:0;"></iframe>
+              </div>
+            </div>
+            <div class="card incident" id="xssIncidentCard" style="display:none;">
+              <h2>⚠️ 安全事件说明（XSS）</h2>
+              <p style="margin-bottom:0.5rem;"><strong>本安全事件由 OA 站内搜索/反馈接口未做输出转义导致的反射型 XSS。</strong></p>
+              <p class="hint" style="margin-bottom:0.5rem;"><strong>技术说明：</strong> 服务端将用户输入（如 <code>q</code>）<strong>未经 HTML 转义</strong>直接拼入响应，攻击者提交的脚本被写回 HTML 并在受害者浏览器中执行，可窃取 Cookie、篡改页面。下方为攻击者反射到页面中的内容。</p>
+              <div class="step"><strong>攻击者反射到页面中的内容</strong><p id="xssStep1"></p></div>
+              <div class="leaked" id="xssLeaked"></div>
+            </div>
+          </div>
+          <div id="attack-content-ssrf" class="attack-content">
+            <div class="card">
+              <h2>SSRF 服务端请求伪造</h2>
+              <p class="hint">通俗讲，<strong>SSRF</strong>就是「让服务器替攻击者发请求」——用户提交一个 URL，<strong>由服务端代为请求</strong>并返回内容；若接口<strong>未对 URL 做白名单或协议限制</strong>，攻击者可让服务器访问内网（如云元数据 <code>http://169.254.169.254/</code>）、<code>file:///etc/passwd</code> 等，从而窃取内网数据或绕过防火墙。模拟 OA「URL 预览」「资源抓取」场景。RASP 可钩子 <code>URL.openConnection</code> 等检测并阻断。</p>
+              <div class="diagram-section">
+                <h3>📌 一张图理解：正常 URL 预览  vs  SSRF 利用</h3>
+                <div class="diagram-box">
+                  <div class="d-compare">
+                    <div class="d-panel">
+                      <div class="d-panel-title">正常 URL 预览</div>
+                      <div class="d-panel-box normal">
+                        <span class="d-node normal">用户填公网 URL</span>
+                        <span class="d-node normal">服务端白名单校验</span>
+                        <span class="d-node normal">仅请求允许的地址</span>
+                      </div>
+                      <div class="d-panel-caption">无内网/本地访问</div>
+                    </div>
+                    <div class="d-arrow-wrap">
+                      <svg width="32" height="24" viewBox="0 0 32 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M2 12 L24 12 M20 8 L28 12 L20 16"/></svg>
+                      <span>漏洞时</span>
+                    </div>
+                    <div class="d-panel">
+                      <div class="d-panel-title">SSRF 利用</div>
+                      <div class="d-panel-box evil">
+                        <span class="d-node evil">攻击者填内网/file URL</span>
+                        <span class="d-node evil pulse">服务端未校验代为请求</span>
+                        <span class="d-node evil">窃取内网/本地数据</span>
+                      </div>
+                      <div class="d-panel-caption">绕过防火墙、读本地文件</div>
+                    </div>
+                  </div>
+                  <div class="diagram-legend">
+                    <span><span class="dot normal"></span> 正常</span>
+                    <span><span class="dot evil"></span> 攻击/SSRF</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>正常业务如何做 URL 预览 · 攻击者如何利用 SSRF</h2>
+              <p><strong>正常业务：</strong> OA 链接预览：用户填 URL，服务端做<strong>白名单或协议限制</strong>（如仅允许 https 且域名在白名单内），再代为请求取标题或内容。</p>
+              <p style="margin-top:0.75rem;"><strong>攻击者如何利用：</strong> 若接口<strong>未校验</strong>用户传入的 <code>url</code>（如 <code>/api/fetch-url?url=xxx</code>），直接 <code>URL.openStream()</code> 等发起请求，攻击者传入内网地址（<code>http://169.254.169.254/</code>）、<code>file:///etc/passwd</code> 等，服务端以自身身份请求并回传结果，攻击者即可窃取内网数据或本地文件。下方演示假设接口存在 SSRF，模拟「填 URL → 服务端代为请求 → 回传结果」。</p>
+              <div class="diagram-section">
+                <h3>📌 动态对比：正常流程  vs  SSRF 利用</h3>
+                <div class="diagram-box">
+                  <div class="d-flow-row">
+                    <div class="d-flow-col">
+                      <div class="d-flow-title">正常流程</div>
+                      <div class="d-flow-node normal">用户填公网 URL</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#64748b" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node normal">白名单校验后请求</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#64748b" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node normal">仅返回允许的目标</div>
+                      <div class="d-flow-caption">无内网/本地</div>
+                    </div>
+                    <div class="d-flow-col">
+                      <div class="d-flow-title">SSRF 利用</div>
+                      <div class="d-flow-node evil">攻击者填内网/file URL</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#dc2626" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node evil">服务端未校验代为请求</div>
+                      <div class="d-flow-arrow"><svg width="20" height="16" viewBox="0 0 20 16" stroke="#dc2626" stroke-width="2"><path d="M10 0 L10 12 M6 8 L10 14 L14 8"/></svg></div>
+                      <div class="d-flow-node evil pulse">回传内网/本地内容</div>
+                      <div class="d-flow-caption">窃取数据</div>
+                    </div>
+                  </div>
+                  <div class="diagram-legend">
+                    <span><span class="dot normal"></span> 正常</span>
+                    <span><span class="dot evil"></span> 攻击</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>攻击路径演示（原理 + 技术表述）</h2>
+              <div class="step"><strong>步骤 0 · 攻击者如何访问到 OA</strong><p>与命令注入相同：通过钓鱼、社工等拿到员工 OA 登录态，以该身份访问内网 OA 及 URL 预览等入口。</p></div>
+              <div class="step"><strong>步骤 1 · OA URL 预览接口未做 URL 校验</strong><p>OA 的链接预览或资源抓取接口根据用户传入的 <code>url</code> 直接发起请求，<strong>未做白名单或协议限制</strong>，属 OA 自身 API 漏洞。</p></div>
+              <div class="step"><strong>步骤 2 · 攻击者传入内网或 file 协议 URL</strong><p>攻击者将内网地址（如云元数据 <code>http://169.254.169.254/</code>）、<code>file:///etc/passwd</code> 等传给接口。</p></div>
+              <div class="step"><strong>步骤 3 · 服务端代为请求并回传结果，窃取内网/本地数据</strong><p>服务端以自身身份请求该 URL，将响应回传；攻击者即可获得内网或本地文件内容。下方演示假设接口存在 SSRF，模拟「填 URL → 服务端请求 → 回传」。</p></div>
+              <div class="diagram-section steps-diagram">
+                <h3>📌 攻击路径一览（点击步骤框可高亮）</h3>
+                <div class="diagram-box">
+                  <div class="d-steps-wrap">
+                    <div class="d-steps-row">
+                      <div class="d-step-node step-node step-0" data-step="0" id="ssrfStepNode0" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 0</span>
+                        <span class="d-step-desc">访问 OA</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="1" id="ssrfStepNode1" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 1</span>
+                        <span class="d-step-desc">接口未校验 URL</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="2" id="ssrfStepNode2" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 2</span>
+                        <span class="d-step-desc">传入内网/file URL</span>
+                      </div>
+                      <div class="d-step-arrow"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"><path d="M4 12 L18 12 M14 8 L20 12 L14 16"/></svg></div>
+                      <div class="d-step-node step-node step-evil" data-step="3" id="ssrfStepNode3" role="button" tabindex="0" title="点击高亮">
+                        <span class="d-step-num">步骤 3</span>
+                        <span class="d-step-desc">代为请求窃取</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>SSRF 演示（假设接口存在 SSRF）</h2>
+              <p class="hint"><strong>技术对应：</strong> 本演示中，服务端根据参数 <code>url</code> 直接 <code>URL.openStream()</code> 代为请求，未做白名单；下方输入的 URL 会被服务端<strong>真实请求</strong>并回传结果。</p>
+              <p class="hint">可尝试「执行窃取演示」查看通过 SSRF 读取本地文件后的回传结果。</p>
+              <div class="form-row">
+                <input type="text" id="ssrfUrl" placeholder="输入 URL，如 http://example.com 或 file:///etc/passwd" value="http://127.0.0.1:8080/">
+                <button type="button" class="btn" id="ssrfRun">请求</button>
+                <button type="button" class="btn btn-ghost" id="ssrfDemo">执行窃取演示（内网/本地）</button>
+              </div>
+              <p class="hint" style="margin-top:0.5rem;"><strong>请求</strong>：使用当前输入 URL 请求接口。<strong>执行窃取演示</strong>：一键填入内网或 <code>file://</code> URL 并请求，用于演示 SSRF 窃取数据场景。</p>
+              <div class="result-box" id="ssrfOutput"></div>
+            </div>
+            <div class="card incident" id="ssrfIncidentCard" style="display:none;">
+              <h2>⚠️ 安全事件说明（SSRF）</h2>
+              <p style="margin-bottom:0.5rem;"><strong>本安全事件由 OA URL 预览/资源抓取接口未做 URL 校验导致的 SSRF。</strong></p>
+              <p class="hint" style="margin-bottom:0.5rem;"><strong>技术说明：</strong> 服务端按用户提供的 URL 代为请求，可能访问了内网或本地文件（<code>file://</code>），存在 SSRF 风险。RASP 可在此类调用处检测目标 URL 并告警/阻断。下方「攻击者窃取到的内容」即为本次请求的响应。</p>
+              <div class="step"><strong>攻击者窃取到的内容</strong><p id="ssrfStep1"></p></div>
+              <div class="leaked" id="ssrfLeaked"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="settings" class="page">
+        <div class="top-bar"><h1>系统设置</h1></div>
+        <div class="sub-nav">
+          <a href="#/settings" class="active">个人设置</a>
+          <a href="#/maintenance">邮件与通知</a>
+        </div>
+        <div class="card">
+          <h2>个人设置</h2>
+          <p class="hint">修改头像、密码、通知偏好等。邮件与通知配置请点击上方「邮件与通知」。</p>
+        </div>
+      </div>
+
+      <div id="maintenance" class="page">
+        <div class="top-bar"><h1>邮件与通知</h1></div>
+        <div class="sub-nav">
+          <a href="#/settings">个人设置</a>
+          <a href="#/maintenance" class="active">邮件与通知</a>
+        </div>
+        <div class="card">
+          <h2>邮件与通知</h2>
+          <p class="hint">配置发件服务器、测试连接等，用于 OA 邮件/通知功能。</p>
+          <ul class="announce-list" style="margin-top:0.5rem;">
+            <li><a href="#/diagnostic" style="color:var(--accent);text-decoration:none;">发件服务器连接测试</a> — 测试 SMTP 服务器是否可达</li>
+            <li>日志下载 — 仅管理员（演示中未实现）</li>
+          </ul>
+        </div>
+      </div>
+
+      <div id="diagnostic" class="page">
+        <div class="top-bar"><h1>发件服务器连接测试</h1></div>
+        <div class="card">
+          <h2>测试 SMTP 服务器连通性</h2>
+          <p class="hint">输入发件服务器（SMTP）地址，点击测试连接。此功能在「邮件/通知设置」中，普通员工在主导航中看不到。</p>
+          <div class="form-row">
+            <input type="text" id="host" placeholder="例如 smtp.example.com 或 172.16.21.97" value="172.16.21.97">
+            <button type="button" class="btn" id="run">测试连接</button>
+          </div>
+          <div class="result-box" id="output"></div>
+        </div>
+        <div class="card incident" id="incidentCard" style="display:none;">
+          <h2>⚠️ 安全事件说明</h2>
+          <p style="margin-bottom:0.75rem;"><strong>本安全事件由 OA 系统自身的 API 漏洞导致。</strong> 以下为攻击步骤与泄露数据说明。</p>
+          <div class="step"><strong>命令注入</strong><p id="step1"></p></div>
+          <div class="step"><strong>OA 接口未做输入校验</strong><p>OA 的「发件服务器测试」API 将用户输入的 SMTP 地址直接拼接到 shell 命令中执行，未做白名单或转义，属 OA 自身接口漏洞。</p></div>
+          <div class="step"><strong>被窃取的数据</strong><p>以下为攻击命令在服务器上的输出：</p></div>
+          <div class="leaked" id="leakedData"></div>
+        </div>
+        <div class="attack-panel">
+          <details open>
+            <summary>🔒 攻击路径演示：OA 自身 API 漏洞 + 黑客如何接触到该 API</summary>
+            <p class="hint" style="margin:0.5rem 0 0 0;">整条攻击链均与 <strong>OA 系统自身的 API 设计/实现漏洞</strong> 相关；同时回答客户常见疑问：「OA 是内网部署，黑客是怎么进到这个接口的？」</p>
+            <div class="attack-steps">
+              <div class="step">
+                <strong>步骤 0 · 攻击者如何能够访问到 OA（进而接触到带漏洞的 API）</strong>
+                <p>OA 虽多为内网部署，但攻击者可通过 <strong>钓鱼邮件、恶意链接、社工</strong> 等方式，使员工在办公环境内点击或登录，从而窃取该员工的 OA 登录态（如 Cookie / 会话）。攻击者无需进入办公场所，即可在远端以该员工身份访问内网 OA，进而访问 OA 的各类页面与 API。本演示中假设攻击者已获得对 OA 的访问能力。</p>
+              </div>
+              <div class="step">
+                <strong>步骤 1 · OA 接口信息泄露（API 漏洞）</strong>
+                <p>攻击者并不知道存在「发件服务器测试」功能。在已能访问 OA 的前提下，通过 OA 自身的「帮助与反馈」页面所调用的 <strong>OA 接口</strong>（如 <code>/api/internal-links</code>）进行信息收集，发现该接口<strong>本不应向普通用户返回</strong>的内部管理链接被泄露，其中包含「发件服务器测试」地址。此为 <strong>OA 系统自身 API 的信息泄露漏洞</strong>。</p>
+                <p><a href="#/help">前往帮助页查看 OA 接口泄露效果 →</a></p>
+              </div>
+              <div class="step">
+                <strong>步骤 2 · OA 未做权限校验（越权，API 设计漏洞）</strong>
+                <p>攻击者直接访问上述地址，发现 OA 对该页面/接口 <strong>未做权限校验</strong>，普通用户也可打开本应仅管理员可见的「发件服务器测试」页面。此为 OA 自身的越权/访问控制缺陷。</p>
+              </div>
+              <div class="step">
+                <strong>步骤 3 · OA 接口命令注入（API 漏洞）与数据窃取</strong>
+                <p>OA 的「发件服务器测试」<strong>接口</strong>（如 <code>/api/smtp-test</code>）将用户输入的 SMTP 地址直接拼入 shell 命令执行，未做输入校验，属 OA 自身 API 漏洞。攻击者在「SMTP 服务器地址」输入框中输入恶意命令（如 <code>172.16.21.97 && cat /etc/passwd</code>），即可在服务器上执行并回显结果。点击下方按钮可执行完整注入演示。</p>
+              </div>
+              <button type="button" class="btn btn-ghost" id="demo">执行注入演示</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div id="help" class="page">
+        <div class="top-bar"><h1>帮助与反馈</h1></div>
+        <div class="card">
+          <h2>常见问题</h2>
+          <p>如何修改密码？请进入「系统设置」-「个人设置」。</p>
+          <p>如何申请审批？请在工作台点击「审批」。</p>
+        </div>
+        <div class="card">
+          <h2>接口说明（开发用）</h2>
+          <p class="hint">以下为 <strong>OA 系统自身提供的接口</strong>，因接口设计/权限控制不当，将本应仅管理员可见的内部管理链接通过 <code>/api/internal-links</code> 返回给了普通用户，形成 <strong>OA API 信息泄露漏洞</strong>。攻击者在已获得 OA 访问能力后，可由此发现「发件服务器测试」等带漏洞的入口。</p>
+          <dl class="internal-links" id="internalLinks">
+            <dt>OA 接口 /api/internal-links 返回内容（模拟泄露）</dt>
+            <dd>加载中…</dd>
+          </dl>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      try {
+      var hostInput = document.getElementById('host');
+      var output = document.getElementById('output');
+      var incidentCard = document.getElementById('incidentCard');
+      var step1 = document.getElementById('step1');
+      var leakedData = document.getElementById('leakedData');
+
+      function showPage(id) {
+        document.querySelectorAll('.page').forEach(function (p) {
+          p.classList.remove('active');
+          p.style.display = 'none';
+        });
+        document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
+        var page = document.getElementById(id);
+        if (page) {
+          page.classList.add('active');
+          page.style.display = 'block';
+        }
+        var navId = (id === 'maintenance' || id === 'diagnostic') ? 'settings' : id;
+        var nav = document.querySelector('.nav-item[data-page="' + navId + '"]');
+        if (nav) nav.classList.add('active');
+      }
+      function showAttackSub(id) {
+        document.querySelectorAll('.attack-content').forEach(function (c) {
+          c.classList.remove('active');
+          c.style.display = 'none';
+        });
+        document.querySelectorAll('.attack-sidebar a').forEach(function (a) { a.classList.remove('active'); });
+        var content = document.getElementById('attack-content-' + id);
+        if (content) {
+          content.classList.add('active');
+          content.style.display = 'block';
+        }
+        var link = document.querySelector('.attack-sidebar a[data-attack="' + id + '"]');
+        if (link) link.classList.add('active');
+      }
+      function route() {
+        var hash = location.hash;
+        if (!hash || hash === '#') hash = '#/';
+        else if (hash.indexOf('#/') !== 0) {
+          var idx = (location.href || '').indexOf('#');
+          hash = (idx >= 0 ? location.href.slice(idx) : '#/');
+          if (hash.indexOf('#/') !== 0) hash = '#/';
+        }
+        if (location.hash !== hash) { location.hash = hash; route(); return; }
+        var path = hash.slice(1).replace(/^\//, '');
+        var parts = path.split('/').filter(Boolean);
+        var segment = parts[0] || 'work';
+        var map = { '': 'work', 'work': 'work', 'settings': 'settings', 'maintenance': 'maintenance', 'diagnostic': 'diagnostic', 'help': 'help', 'attack': 'attack' };
+        if (segment === 'attack') {
+          showPage('attack');
+          var sub = parts[1] || 'command-injection';
+          if (!document.getElementById('attack-content-' + sub)) sub = 'command-injection';
+          showAttackSub(sub);
+        } else {
+          showPage(map[segment] || 'work');
+        }
+      }
+      function goTo(page) {
+        if (!page) return;
+        location.hash = page === 'work' ? '#/' : '#/' + page;
+        route();
+      }
+      window.addEventListener('hashchange', route);
+      window.addEventListener('load', function () { route(); });
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', route);
+      } else {
+        route();
+      }
+
+      // 主导航：事件委托，点击直接切换页面（不依赖 hash），再同步 hash 便于刷新保持
+      var mainNav = document.getElementById('main-nav');
+      if (mainNav) {
+        mainNav.addEventListener('click', function (e) {
+          var el = e.target.closest('.nav-item');
+          if (!el || !el.getAttribute('data-page')) return;
+          e.preventDefault();
+          var page = el.getAttribute('data-page');
+          showPage(page);
+          if (page === 'attack') showAttackSub('command-injection');
+          location.hash = page === 'work' ? '#/' : '#/' + page;
+        });
+      }
+      // 主内容区内的 hash 链接（快捷入口、攻击子菜单等）
+      var mainEl = document.querySelector('main');
+      if (mainEl) {
+        mainEl.addEventListener('click', function (e) {
+          var a = e.target.closest('a[href^="#/"]');
+          if (!a) return;
+          e.preventDefault();
+          var path = (a.getAttribute('href') || '').slice(2).replace(/^\//, '');
+          if (path) { location.hash = '#/' + path; route(); }
+        });
+      }
+
+      // 帮助页加载内部链接（模拟泄露）
+      function loadInternalLinks() {
+        var el = document.getElementById('internalLinks');
+        if (!el) return;
+        fetch('/api/internal-links').then(function (r) { return r.json(); }).then(function (arr) {
+          var html = '<dt>OA 接口 /api/internal-links 返回内容（模拟泄露）</dt>';
+          arr.forEach(function (item) {
+            var url = (item.url || '').trim();
+            if (url.indexOf('#') !== 0) url = '#/' + url.replace(/^\//, '');
+            html += '<dd><a href="' + url + '">' + item.name + '</a> — ' + (item.desc || '') + '</dd>';
+          });
+          el.innerHTML = html;
+        }).catch(function () { el.querySelector('dd').textContent = '接口请求失败'; });
+      }
+      window.addEventListener('hashchange', function () { if (location.hash.indexOf('help') !== -1) loadInternalLinks(); });
+      if (location.hash.indexOf('help') !== -1) loadInternalLinks();
+
+      function isInjectionOutput(text) {
+        if (!text || text.length > 5000) return false;
+        var lower = text.toLowerCase();
+        return /uid=.*gid=/.test(text) || /root:.*:0:0/.test(text) || (lower.indexOf('passwd') !== -1 && text.indexOf(':') !== -1) || /groups=/.test(text);
+      }
+      function showResult(plain, payload) {
+        if (!output) return;
+        output.textContent = plain;
+        output.classList.remove('loading');
+        if (isInjectionOutput(plain)) {
+          if (incidentCard) incidentCard.style.display = 'block';
+          if (step1) step1.textContent = '攻击者在「SMTP 服务器地址」输入框中输入了：' + (payload || (hostInput && hostInput.value));
+          if (leakedData) leakedData.textContent = (plain || '').trim();
+          output.classList.add('incident');
+        } else {
+          if (incidentCard) incidentCard.style.display = 'none';
+          output.classList.remove('incident');
+        }
+      }
+
+      var runBtn = document.getElementById('run');
+      var demoBtn = document.getElementById('demo');
+      if (runBtn) {
+        runBtn.onclick = function () {
+          var host = (hostInput && hostInput.value.trim()) || '172.16.21.97';
+          if (output) { output.textContent = '执行中...'; output.classList.add('loading'); output.classList.remove('incident'); }
+          if (incidentCard) incidentCard.style.display = 'none';
+          fetch('/api/smtp-test?address=' + encodeURIComponent(host))
+            .then(function (r) { return r.text(); })
+            .then(function (t) { showResult(t || '(无输出)', host); })
+            .catch(function (err) { showResult('请求失败: ' + err.message); });
+        };
+      }
+      if (demoBtn && runBtn) {
+        demoBtn.onclick = function () {
+          if (hostInput) hostInput.value = '172.16.21.97 && cat /etc/passwd';
+          runBtn.click();
+        };
+      }
+
+      var memCmd = document.getElementById('memCmd');
+      var memOutput = document.getElementById('memOutput');
+      var memIncidentCard = document.getElementById('memIncidentCard');
+      var memStep1 = document.getElementById('memStep1');
+      var memLeaked = document.getElementById('memLeaked');
+      if (memCmd && memOutput) {
+        function isSensitiveConfig(text) {
+          if (!text || text.length > 8000) return false;
+          var t = text.toLowerCase();
+          return t.indexOf('password') !== -1 || t.indexOf('jdbc') !== -1 || t.indexOf('datasource') !== -1 || t.indexOf('redis') !== -1 || t.indexOf('secret') !== -1 || isInjectionOutput(text);
+        }
+        function showMemResult(plain, payload) {
+          memOutput.textContent = plain;
+          memOutput.classList.remove('loading');
+          if (isSensitiveConfig(plain)) {
+            memIncidentCard.style.display = 'block';
+            memStep1.textContent = '通过内存马执行的命令：' + (payload || memCmd.value) + '。攻击者据此可获得数据库账号密码、Redis 等配置与密钥，进而登录数据库、拖库或横向移动。';
+            memLeaked.textContent = plain.trim();
+          } else {
+            memIncidentCard.style.display = 'none';
+          }
+        }
+        document.getElementById('memRun').onclick = function () {
+          var cmd = memCmd.value.trim() || 'id';
+          memOutput.textContent = '执行中...';
+          memOutput.classList.add('loading');
+          memIncidentCard.style.display = 'none';
+          fetch('/api/memory-shell?cmd=' + encodeURIComponent(cmd))
+            .then(function (r) { return r.text(); })
+            .then(function (t) { showMemResult(t || '(无输出)', cmd); })
+            .catch(function (err) { showMemResult('请求失败: ' + err.message); });
+        };
+        document.getElementById('memDemo').onclick = function () {
+          memCmd.value = 'cat /app/config/application.properties';
+          document.getElementById('memRun').click();
+        };
+        // XSS 演示：与内存马对齐 — result-box + 敏感时显示 incident 卡，双按钮
+        var xssQuery = document.getElementById('xssQuery');
+        var xssOutput = document.getElementById('xssOutput');
+        var xssFrame = document.getElementById('xssFrame');
+        var xssIncidentCard = document.getElementById('xssIncidentCard');
+        var xssStep1 = document.getElementById('xssStep1');
+        var xssLeaked = document.getElementById('xssLeaked');
+        var xssRun = document.getElementById('xssRun');
+        var xssDemo = document.getElementById('xssDemo');
+        if (xssQuery && xssOutput && xssFrame && xssRun) {
+          function isXssPayload(q) {
+            if (!q || q.length > 2000) return false;
+            var lower = q.toLowerCase();
+            return lower.indexOf('<script') !== -1 || lower.indexOf('onerror=') !== -1 || lower.indexOf('onload=') !== -1 || lower.indexOf('javascript:') !== -1;
+          }
+          function showXssResult(html, payload) {
+            xssOutput.textContent = '(服务端返回的 HTML 长度: ' + (html ? html.length : 0) + ' 字符，已在下方 iframe 预览中渲染)';
+            xssOutput.classList.remove('loading');
+            xssFrame.srcdoc = html || '';
+            if (isXssPayload(payload)) {
+              xssIncidentCard.style.display = 'block';
+              xssStep1.textContent = '攻击者提交的 payload 被服务端原样反射到 HTML：' + (payload || xssQuery.value);
+              xssLeaked.textContent = payload || xssQuery.value;
+            } else {
+              xssIncidentCard.style.display = 'none';
+            }
+          }
+          xssRun.onclick = function () {
+            var q = xssQuery.value.trim() || 'test';
+            xssOutput.textContent = '请求中...';
+            xssOutput.classList.add('loading');
+            xssIncidentCard.style.display = 'none';
+            fetch('/api/xss-demo?q=' + encodeURIComponent(q))
+              .then(function (r) { return r.text(); })
+              .then(function (html) { showXssResult(html, q); })
+              .catch(function (err) {
+                xssOutput.textContent = '请求失败: ' + err.message;
+                xssOutput.classList.remove('loading');
+                xssFrame.srcdoc = '<p>请求失败: ' + err.message + '</p>';
+              });
+          };
+          if (xssDemo) xssDemo.onclick = function () {
+            xssQuery.value = '\x3cscript\x3ealert("XSS")\x3c/script\x3e';
+            xssRun.click();
+          };
+        }
+        // SSRF 演示：与内存马对齐 — result-box + 独立 incident 卡 + step/leaked，双按钮
+        var ssrfUrl = document.getElementById('ssrfUrl');
+        var ssrfOutput = document.getElementById('ssrfOutput');
+        var ssrfIncidentCard = document.getElementById('ssrfIncidentCard');
+        var ssrfStep1 = document.getElementById('ssrfStep1');
+        var ssrfLeaked = document.getElementById('ssrfLeaked');
+        var ssrfRun = document.getElementById('ssrfRun');
+        var ssrfDemo = document.getElementById('ssrfDemo');
+        if (ssrfUrl && ssrfOutput && ssrfRun) {
+          function isSsrfSensitive(text) {
+            if (!text || text.length > 10000) return false;
+            var t = text.toLowerCase();
+            return /root:.*:0:0/.test(text) || t.indexOf('passwd') !== -1 || t.indexOf('metadata') !== -1 || t.indexOf('169.254.169.254') !== -1;
+          }
+          function showSsrfResult(t, url) {
+            ssrfOutput.textContent = t || '(无输出)';
+            ssrfOutput.classList.remove('loading');
+            if (isSsrfSensitive(t)) {
+              ssrfIncidentCard.style.display = 'block';
+              ssrfStep1.textContent = '服务端按用户提供的 URL 代为请求并回传了内网或本地文件内容。请求的 URL：' + (url || ssrfUrl.value);
+              ssrfLeaked.textContent = (t || '').trim();
+            } else {
+              ssrfIncidentCard.style.display = 'none';
+            }
+          }
+          ssrfRun.onclick = function () {
+            var url = ssrfUrl.value.trim();
+            if (!url) return;
+            ssrfOutput.textContent = '请求中...';
+            ssrfOutput.classList.add('loading');
+            ssrfIncidentCard.style.display = 'none';
+            fetch('/api/fetch-url?url=' + encodeURIComponent(url))
+              .then(function (r) { return r.text(); })
+              .then(function (t) { showSsrfResult(t, url); })
+              .catch(function (err) {
+                ssrfOutput.textContent = '请求失败: ' + err.message;
+                ssrfOutput.classList.remove('loading');
+              });
+          };
+          if (ssrfDemo) ssrfDemo.onclick = function () {
+            ssrfUrl.value = 'file:///etc/passwd';
+            ssrfRun.click();
+          };
+        }
+        // 攻击路径步骤图：按行限定高亮（内存马 / XSS / SSRF 共用）
+        var attackPage = document.getElementById('attack');
+        if (attackPage) attackPage.addEventListener('click', function (e) {
+          var node = e.target.closest('.d-step-node');
+          if (!node) return;
+          var row = node.closest('.d-steps-row');
+          if (!row) return;
+          var nodes = row.querySelectorAll('.d-step-node');
+          var idx = Array.prototype.indexOf.call(nodes, node);
+          if (idx < 0) return;
+          if (node.classList.contains('highlight')) {
+            nodes.forEach(function (n) { n.classList.remove('highlight', 'dim'); });
+          } else {
+            nodes.forEach(function (n, i) {
+              n.classList.remove('highlight', 'dim');
+              if (i === idx) n.classList.add('highlight');
+              else n.classList.add('dim');
+            });
+          }
+        });
+      }
+      } catch (err) {
+        console.error('RASP demo script error:', err);
+        document.querySelectorAll('.page').forEach(function (p) { p.style.display = 'none'; });
+        var work = document.getElementById('work');
+        if (work) work.style.display = 'block';
+      }
+    })();
+  </script>
+</body>
+</html>

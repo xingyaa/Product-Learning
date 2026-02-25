@@ -1,0 +1,7 @@
+# 单阶段：仅需 JRE。使用前请先在本机执行 ./build.sh 生成 out/*.class
+FROM eclipse-temurin:8-jre-alpine
+WORKDIR /app
+COPY out/*.class .
+COPY index.html .
+EXPOSE 8080
+ENTRYPOINT ["java", "DiagnosticsServer"]
