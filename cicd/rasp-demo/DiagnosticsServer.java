@@ -3,9 +3,13 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -14,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Base64;
 import java.util.concurrent.Executors;
 
 /**
@@ -31,6 +36,8 @@ public class DiagnosticsServer {
         server.createContext("/api/memory-shell", new MemoryShellHandler());
         server.createContext("/api/xss-demo", new XssDemoHandler());
         server.createContext("/api/fetch-url", new SsrfDemoHandler());
+        server.createContext("/api/deserialization-import", new DeserializationDemoHandler());
+        server.createContext("/api/jni-load", new JniLoadHandler());
         server.createContext("/", new RootHandler());
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
@@ -47,11 +54,118 @@ public class DiagnosticsServer {
             }
             String json = "[{\"name\":\"发件服务器测试\",\"url\":\"#/diagnostic\",\"desc\":\"邮件/通知设置\"},"
                     + "{\"name\":\"日志下载\",\"url\":\"#/logs\",\"desc\":\"仅管理员\"},"
+                    + "{\"name\":\"审批导入\",\"url\":\"#/attack/deserialization\",\"desc\":\"模板导入\"},"
+                    + "{\"name\":\"插件中心\",\"url\":\"#/attack/jni-load\",\"desc\":\"本地加速库\"},"
                     + "{\"name\":\"站内搜索\",\"url\":\"#/attack/xss\",\"desc\":\"意见/搜索反馈\"},"
                     + "{\"name\":\"资源预览\",\"url\":\"#/attack/ssrf\",\"desc\":\"URL 预览\"}]";
             ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
             send(ex, 200, json);
         }
+    }
+
+    /**
+     * 反序列化 RCE 演示：后端直接对用户可控数据执行 ObjectInputStream.readObject()。
+     */
+    static class DeserializationDemoHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange ex) throws IOException {
+            if (!"GET".equals(ex.getRequestMethod())) {
+                send(ex, 405, "Method Not Allowed");
+                return;
+            }
+            URI uri = ex.getRequestURI();
+            String query = uri.getRawQuery();
+            String cmd = "id";
+            String data = "";
+            if (query != null) {
+                for (String pair : query.split("&")) {
+                    int eq = pair.indexOf('=');
+                    if (eq > 0 && "cmd".equals(pair.substring(0, eq))) {
+                        cmd = java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name());
+                    }
+                    if (eq > 0 && "data".equals(pair.substring(0, eq))) {
+                        data = java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name());
+                    }
+                }
+            }
+            byte[] bytes;
+            if (data == null || data.isEmpty()) {
+                bytes = serialize(new ImportTask(cmd));
+            } else {
+                bytes = Base64.getDecoder().decode(data);
+            }
+            StringBuilder out = new StringBuilder();
+            try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes))) {
+                Object obj = ois.readObject();
+                out.append("反序列化完成，对象类型: ").append(obj.getClass().getName()).append("\n");
+                out.append("提示: 若 payload 带有恶意 gadget，readObject 期间可执行任意代码。\n");
+            } catch (Exception e) {
+                out.append("反序列化失败: ").append(e.getMessage());
+            }
+            ex.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+            send(ex, 200, out.toString());
+        }
+    }
+
+    /**
+     * JNI 加载演示：插件管理接口可控加载本地 .so/.dll 路径，触发 System.load。
+     */
+    static class JniLoadHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange ex) throws IOException {
+            if (!"GET".equals(ex.getRequestMethod())) {
+                send(ex, 405, "Method Not Allowed");
+                return;
+            }
+            URI uri = ex.getRequestURI();
+            String query = uri.getRawQuery();
+            String lib = "/tmp/oa-plugins/liboa-safe.so";
+            if (query != null) {
+                for (String pair : query.split("&")) {
+                    int eq = pair.indexOf('=');
+                    if (eq > 0 && "lib".equals(pair.substring(0, eq))) {
+                        lib = java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name());
+                        break;
+                    }
+                }
+            }
+            StringBuilder out = new StringBuilder();
+            out.append("[jni-loader] try load: ").append(lib).append("\n");
+            try {
+                // 故意对外暴露可控路径，若攻击者可上传恶意 so/dll，可在加载时执行 native 代码。
+                System.load(lib);
+                out.append("JNI 库加载成功。\n");
+            } catch (Throwable t) {
+                out.append("JNI 库加载失败: ").append(t.getClass().getSimpleName()).append(" - ").append(t.getMessage()).append("\n");
+                out.append("风险说明: 只要加载到了攻击者控制的本地库，native 代码会在 JVM 进程权限下执行。\n");
+            }
+            ex.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+            send(ex, 200, out.toString());
+        }
+    }
+
+    static class ImportTask implements java.io.Serializable {
+        private static final long serialVersionUID = 1L;
+        private final String cmd;
+
+        ImportTask(String cmd) {
+            this.cmd = cmd;
+        }
+
+        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+            in.defaultReadObject();
+            Process proc = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+            String out = readProcessOutput(proc);
+            System.out.println("[deserialize-import] exec(" + cmd + ")\n" + out);
+        }
+    }
+
+    private static byte[] serialize(Object o) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+            oos.writeObject(o);
+        }
+        return bos.toByteArray();
     }
 
     static class RootHandler implements HttpHandler {

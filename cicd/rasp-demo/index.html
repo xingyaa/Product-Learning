@@ -327,6 +327,8 @@
           <nav class="attack-sidebar">
             <a href="#/attack/command-injection" data-attack="command-injection">命令注入</a>
             <a href="#/attack/memory-shell" data-attack="memory-shell">内存马注入</a>
+            <a href="#/attack/deserialization" data-attack="deserialization">反序列化攻击</a>
+            <a href="#/attack/jni-load" data-attack="jni-load">JNI 加载劫持</a>
             <a href="#/attack/xss" data-attack="xss">XSS跨站脚本</a>
             <a href="#/attack/ssrf" data-attack="ssrf">SSRF服务端请求伪造</a>
           </nav>
@@ -467,6 +469,46 @@
               <div class="leaked" id="memLeaked"></div>
             </div>
           </div>
+          <div id="attack-content-deserialization" class="attack-content">
+            <div class="card">
+              <h2>反序列化攻击（OA 审批导入）</h2>
+              <p class="hint">模拟 OA「审批数据导入/模板导入」接口直接对用户提交字节流执行 <code>ObjectInputStream.readObject()</code>。攻击者构造恶意序列化 payload，可在反序列化阶段触发命令执行（RCE）。</p>
+              <p class="hint">技术对应接口：<code>/api/deserialization-import?cmd=xxx</code>（演示中服务端会构造并反序列化对象，触发 <code>readObject</code> 内命令执行）。</p>
+              <div class="form-row">
+                <input type="text" id="deserializeCmd" placeholder="输入反序列化触发命令，如 id 或 cat /etc/passwd" value="id">
+                <button type="button" class="btn" id="deserializeRun">执行导入</button>
+                <button type="button" class="btn btn-ghost" id="deserializeDemo">执行窃取演示</button>
+              </div>
+              <div class="result-box" id="deserializeOutput"></div>
+            </div>
+            <div class="card incident" id="deserializeIncidentCard" style="display:none;">
+              <h2>⚠️ 安全事件说明（反序列化）</h2>
+              <p class="hint"><strong>风险：</strong> 导入接口反序列化了攻击者可控数据，导致 <code>readObject</code> 链路执行恶意逻辑。</p>
+              <div class="step"><strong>攻击者执行的命令</strong><p id="deserializeStep1"></p></div>
+              <div class="leaked" id="deserializeLeaked"></div>
+            </div>
+          </div>
+
+          <div id="attack-content-jni-load" class="attack-content">
+            <div class="card">
+              <h2>JNI 加载劫持（OA 插件中心）</h2>
+              <p class="hint">模拟 OA 插件中心通过 <code>System.load</code> 加载本地加速库。若路径可被用户控制，攻击者上传恶意 <code>.so/.dll</code> 后可让 JVM 加载并执行 native 代码。</p>
+              <p class="hint">技术对应接口：<code>/api/jni-load?lib=xxx</code>，演示可观察加载路径与失败/成功信息，RASP 可在 <code>System.load</code> 处检测。</p>
+              <div class="form-row">
+                <input type="text" id="jniLib" placeholder="输入待加载的本地库路径，如 /tmp/libevil.so" value="/tmp/libevil.so">
+                <button type="button" class="btn" id="jniRun">加载库</button>
+                <button type="button" class="btn btn-ghost" id="jniDemo">执行劫持演示</button>
+              </div>
+              <div class="result-box" id="jniOutput"></div>
+            </div>
+            <div class="card incident" id="jniIncidentCard" style="display:none;">
+              <h2>⚠️ 安全事件说明（JNI 加载）</h2>
+              <p class="hint"><strong>风险：</strong> 一旦加载攻击者控制的 native 库，代码将在应用进程权限下执行。</p>
+              <div class="step"><strong>攻击者控制的库路径</strong><p id="jniStep1"></p></div>
+              <div class="leaked" id="jniLeaked"></div>
+            </div>
+          </div>
+
           <div id="attack-content-xss" class="attack-content">
             <div class="card">
               <h2>XSS 跨站脚本（反射型等）</h2>
@@ -1013,6 +1055,85 @@
           memCmd.value = 'cat /app/config/application.properties';
           document.getElementById('memRun').click();
         };
+        // 反序列化演示：导入接口反序列化可控对象
+        var deserializeCmd = document.getElementById('deserializeCmd');
+        var deserializeOutput = document.getElementById('deserializeOutput');
+        var deserializeIncidentCard = document.getElementById('deserializeIncidentCard');
+        var deserializeStep1 = document.getElementById('deserializeStep1');
+        var deserializeLeaked = document.getElementById('deserializeLeaked');
+        var deserializeRun = document.getElementById('deserializeRun');
+        var deserializeDemo = document.getElementById('deserializeDemo');
+        if (deserializeCmd && deserializeOutput && deserializeRun) {
+          function showDeserializeResult(t, cmd) {
+            deserializeOutput.textContent = t || '(无输出)';
+            deserializeOutput.classList.remove('loading');
+            if ((cmd || '').indexOf('cat /etc/passwd') !== -1 || /反序列化完成/.test(t || '')) {
+              deserializeIncidentCard.style.display = 'block';
+              deserializeStep1.textContent = '导入接口在 readObject 链路触发命令执行：' + (cmd || deserializeCmd.value);
+              deserializeLeaked.textContent = t || '(无输出)';
+            } else {
+              deserializeIncidentCard.style.display = 'none';
+            }
+          }
+          deserializeRun.onclick = function () {
+            var cmd = deserializeCmd.value.trim() || 'id';
+            deserializeOutput.textContent = '请求中...';
+            deserializeOutput.classList.add('loading');
+            deserializeIncidentCard.style.display = 'none';
+            fetch('/api/deserialization-import?cmd=' + encodeURIComponent(cmd))
+              .then(function (r) { return r.text(); })
+              .then(function (t) { showDeserializeResult(t, cmd); })
+              .catch(function (err) {
+                deserializeOutput.textContent = '请求失败: ' + err.message;
+                deserializeOutput.classList.remove('loading');
+              });
+          };
+          if (deserializeDemo) deserializeDemo.onclick = function () {
+            deserializeCmd.value = 'cat /etc/passwd';
+            deserializeRun.click();
+          };
+        }
+
+        // JNI 加载演示：插件中心加载本地库路径
+        var jniLib = document.getElementById('jniLib');
+        var jniOutput = document.getElementById('jniOutput');
+        var jniIncidentCard = document.getElementById('jniIncidentCard');
+        var jniStep1 = document.getElementById('jniStep1');
+        var jniLeaked = document.getElementById('jniLeaked');
+        var jniRun = document.getElementById('jniRun');
+        var jniDemo = document.getElementById('jniDemo');
+        if (jniLib && jniOutput && jniRun) {
+          function showJniResult(t, lib) {
+            jniOutput.textContent = t || '(无输出)';
+            jniOutput.classList.remove('loading');
+            if ((lib || '').indexOf('/tmp/') === 0 || (t || '').indexOf('风险说明') !== -1) {
+              jniIncidentCard.style.display = 'block';
+              jniStep1.textContent = '可控 JNI 库路径被传入 System.load：' + (lib || jniLib.value);
+              jniLeaked.textContent = t || '(无输出)';
+            } else {
+              jniIncidentCard.style.display = 'none';
+            }
+          }
+          jniRun.onclick = function () {
+            var lib = jniLib.value.trim();
+            if (!lib) return;
+            jniOutput.textContent = '请求中...';
+            jniOutput.classList.add('loading');
+            jniIncidentCard.style.display = 'none';
+            fetch('/api/jni-load?lib=' + encodeURIComponent(lib))
+              .then(function (r) { return r.text(); })
+              .then(function (t) { showJniResult(t, lib); })
+              .catch(function (err) {
+                jniOutput.textContent = '请求失败: ' + err.message;
+                jniOutput.classList.remove('loading');
+              });
+          };
+          if (jniDemo) jniDemo.onclick = function () {
+            jniLib.value = '/tmp/liboa-evil.so';
+            jniRun.click();
+          };
+        }
+
         // XSS 演示：与内存马对齐 — result-box + 敏感时显示 incident 卡，双按钮
         var xssQuery = document.getElementById('xssQuery');
         var xssOutput = document.getElementById('xssOutput');
