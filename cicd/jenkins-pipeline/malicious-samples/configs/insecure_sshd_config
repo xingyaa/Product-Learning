@@ -1,0 +1,10 @@
+# [TEST SAMPLE] Insecure SSH Configuration - FOR SECURITY TESTING ONLY
+Port 22
+PermitRootLogin yes
+PasswordAuthentication yes
+PermitEmptyPasswords yes
+X11Forwarding yes
+UsePAM no
+MaxAuthTries 999
+AllowTcpForwarding yes
+GatewayPorts yes

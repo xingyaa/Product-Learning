@@ -1,177 +1,215 @@
 pipeline {
     agent any
-    
+
     environment {
-        DOCKER_IMAGE = 'cicd-test-app'
-        DOCKER_TAG = "${env.BUILD_NUMBER}"
-        DOCKER_REGISTRY = 'localhost:5000'  // 可以根据需要修改
-        APP_TEST_PORT = '18080'             // 避免与 Jenkins(8080) 冲突
-        REGISTRY_CONTAINER = 'local-registry'
+        // ============ 镜像配置 ============
+        DOCKER_IMAGE     = 'vuln-target-app'
+        DOCKER_TAG       = "${env.BUILD_NUMBER}"
+        APP_TEST_PORT    = '18080'
+
+        // ============ Harbor 配置（按你的环境修改） ============
+        // Harbor 地址（不带 https://）
+        HARBOR_URL       = '192.168.1.100'
+        // Harbor 项目名（需要在 Harbor 中提前创建）
+        HARBOR_PROJECT   = 'security-test'
+        // Harbor 完整镜像路径
+        HARBOR_IMAGE     = "${HARBOR_URL}/${HARBOR_PROJECT}/${DOCKER_IMAGE}"
+        // Jenkins 中配置的 Harbor 凭据 ID
+        HARBOR_CRED_ID   = 'harbor-credentials'
     }
-    
+
     stages {
-        stage('准备本地代码') {
+        // ========== 阶段 1：准备代码 ==========
+        stage('准备代码') {
             steps {
-                echo '使用本地文件系统（无需 Git 检出）...'
+                echo '📂 准备构建代码...'
                 script {
-                    // Jenkins 容器已挂载 /root/python-sdk-main 到 /var/jenkins_home/workspace/python-sdk-main
-                    // 直接使用挂载的本地代码
                     sh '''
-                        echo "当前工作目录:"
-                        pwd
-                        echo "当前目录内容:"
-                        ls -la || true
-                        echo "检查源目录是否存在:"
-                        SOURCE_DIR="/var/jenkins_home/workspace/python-sdk-main/cicd"
+                        SOURCE_DIR="/var/jenkins_home/workspace/python-sdk-main/cicd/jenkins-pipeline"
                         if [ -d "${SOURCE_DIR}" ]; then
-                            echo "✓ 找到源目录: ${SOURCE_DIR}"
-                            echo "源目录内容:"
-                            ls -la "${SOURCE_DIR}" || true
-                            echo "复制 cicd 目录到当前工作目录..."
-                            if cp -r "${SOURCE_DIR}" ./cicd 2>&1; then
-                                echo "✓ 复制完成"
-                                echo "验证复制的目录:"
-                                ls -la ./cicd || true
-                            else
-                                echo "⚠ cp 命令失败，尝试其他方法..."
-                                mkdir -p ./cicd || true
-                                if command -v rsync >/dev/null 2>&1; then
-                                    rsync -av "${SOURCE_DIR}/" ./cicd/ || true
-                                else
-                                    echo "⚠ rsync 不可用，尝试手动复制关键文件..."
-                                    # 至少确保目录存在
-                                    mkdir -p ./cicd || true
-                                fi
-                            fi
+                            echo "✓ 找到源目录"
+                            cp -r "${SOURCE_DIR}" ./build-context
+                            ls -la ./build-context/
                         else
-                            echo "⚠ 源目录不存在: ${SOURCE_DIR}"
-                            echo "检查父目录:"
+                            echo "✗ 源目录不存在: ${SOURCE_DIR}"
+                            echo "  检查可用目录："
                             ls -la /var/jenkins_home/workspace/ || true
-                            echo "检查 python-sdk-main 目录:"
-                            ls -la /var/jenkins_home/workspace/python-sdk-main/ || true
-                            echo "尝试创建空的 cicd 目录..."
-                            mkdir -p ./cicd || true
-                        fi
-                        echo "最终检查 cicd 目录:"
-                        if [ -d "./cicd" ]; then
-                            echo "✓ cicd 目录已存在"
-                            ls -la ./cicd || true
-                        else
-                            echo "✗ cicd 目录创建失败"
                             exit 1
                         fi
                     '''
                 }
             }
         }
-        
-        stage('构建') {
+
+        // ========== 阶段 2：构建靶标镜像 ==========
+        stage('构建靶标镜像') {
             steps {
-                echo '开始构建...'
-                // 确保 Docker 可用
-                sh 'docker --version'
-                sh 'docker info'
+                echo '🔨 构建容器安全测试靶标镜像...'
+                dir('build-context') {
+                    sh """
+                        echo "Docker 版本:"
+                        docker --version
+                        echo ""
+                        echo "开始构建镜像: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                        docker build \
+                            --no-cache \
+                            -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                            -t ${DOCKER_IMAGE}:latest \
+                            .
+                        echo ""
+                        echo "✓ 镜像构建完成"
+                        docker images ${DOCKER_IMAGE}
+                    """
+                }
             }
         }
-        
-        stage('测试') {
+
+        // ========== 阶段 3：验证镜像 ==========
+        stage('验证镜像') {
             steps {
-                echo '运行测试...'
+                echo '🧪 启动容器验证靶标应用...'
+                sh """
+                    docker rm -f test-vuln-target 2>/dev/null || true
+
+                    docker run --rm -d \
+                        --name test-vuln-target \
+                        -p ${APP_TEST_PORT}:8000 \
+                        ${DOCKER_IMAGE}:${DOCKER_TAG}
+
+                    echo "等待应用启动..."
+                    sleep 5
+
+                    echo "--- 健康检查 ---"
+                    curl -fsS http://localhost:${APP_TEST_PORT}/health || echo "⚠ 健康检查失败"
+
+                    echo ""
+                    echo "--- 漏洞端点验证 ---"
+                    curl -fsS http://localhost:${APP_TEST_PORT}/vuln/cmd?cmd=whoami || true
+                    echo ""
+                    curl -fsS http://localhost:${APP_TEST_PORT}/vuln/file?path=/etc/passwd | head -3 || true
+                    echo ""
+
+                    echo ""
+                    echo "--- 恶意文件检查 ---"
+                    docker exec test-vuln-target ls -la /var/www/html/ || true
+                    docker exec test-vuln-target ls -la /tmp/.hidden/ || true
+                    docker exec test-vuln-target ls -la /tmp/.miner/ || true
+
+                    echo ""
+                    echo "✓ 靶标验证完成"
+                    docker stop test-vuln-target || true
+                """
+            }
+        }
+
+        // ========== 阶段 4：镜像安全信息（可选，供安全平台对比） ==========
+        stage('安全扫描摘要') {
+            steps {
+                echo '📋 输出安全风险摘要...'
+                sh """
+                    echo "======================================"
+                    echo "  容器安全测试靶标 - 风险清单"
+                    echo "======================================"
+                    echo ""
+                    echo "🔴 高危 - 恶意文件："
+                    echo "  - /var/www/html/shell.php        (PHP Webshell)"
+                    echo "  - /var/www/html/cmd.jsp          (JSP Webshell)"
+                    echo "  - /var/www/html/eval_shell.py    (Python Webshell)"
+                    echo "  - /var/www/html/aspx_cmd.aspx    (ASPX Webshell)"
+                    echo "  - /tmp/.hidden/reverse_shell.sh  (反弹 Shell)"
+                    echo "  - /tmp/.hidden/bind_shell.py     (Bind Shell 后门)"
+                    echo "  - /tmp/.miner/start_miner.sh     (挖矿脚本)"
+                    echo "  - /tmp/.miner/config.json        (挖矿池配置)"
+                    echo "  - /root/.cache/.sys/rootkit_loader.c (Rootkit)"
+                    echo ""
+                    echo "🔴 高危 - 危险配置："
+                    echo "  - /root/.ssh/authorized_keys     (植入的后门公钥)"
+                    echo "  - /etc/ssh/sshd_config           (允许 root 登录+空密码)"
+                    echo "  - /etc/cron.d/malicious           (恶意定时任务)"
+                    echo "  - /app/.env                       (泄露的凭据文件)"
+                    echo ""
+                    echo "🔴 高危 - 运行时风险："
+                    echo "  - 以 root 用户运行"
+                    echo "  - 硬编码 AWS/DB/Redis 密码到环境变量"
+                    echo "  - 安装 nmap/netcat 等危险工具"
+                    echo "  - 暴露端口 22(SSH) 和 31337(后门)"
+                    echo "  - Web 应用含命令注入/文件读取/SSRF 漏洞"
+                    echo ""
+                    echo "======================================"
+                """
+            }
+        }
+
+        // ========== 阶段 5：推送到 Harbor ==========
+        stage('推送到 Harbor') {
+            steps {
+                echo '🚀 推送镜像到 Harbor...'
                 script {
-                    try {
-                        // 这里的 Python 测试仅用于验证 python-jenkins 可用；
-                        // 在很多 Jenkins Agent 上可能没有 Python，因此允许失败继续。
-                        dir('cicd') {
-                            sh '''
-                                python test_jenkins_client.py || echo "Jenkins客户端测试完成"
-                            '''
-                        }
-                    } catch (Exception e) {
-                        echo "测试阶段出现问题: ${e}"
-                        // 可以选择继续或中止
+                    // 使用 Jenkins 凭据登录 Harbor
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: env.HARBOR_CRED_ID,
+                            usernameVariable: 'HARBOR_USER',
+                            passwordVariable: 'HARBOR_PASS'
+                        )
+                    ]) {
+                        sh """
+                            echo "登录 Harbor: ${HARBOR_URL}"
+                            echo "\${HARBOR_PASS}" | docker login ${HARBOR_URL} -u "\${HARBOR_USER}" --password-stdin
+
+                            echo ""
+                            echo "打标签..."
+                            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${HARBOR_IMAGE}:${DOCKER_TAG}
+                            docker tag ${DOCKER_IMAGE}:latest         ${HARBOR_IMAGE}:latest
+
+                            echo ""
+                            echo "推送镜像..."
+                            docker push ${HARBOR_IMAGE}:${DOCKER_TAG}
+                            docker push ${HARBOR_IMAGE}:latest
+
+                            echo ""
+                            echo "✓ 推送完成!"
+                            echo "  ${HARBOR_IMAGE}:${DOCKER_TAG}"
+                            echo "  ${HARBOR_IMAGE}:latest"
+                        """
                     }
                 }
             }
         }
-        
-        stage('构建 Docker 镜像') {
-            steps {
-                echo '构建 Docker 镜像...'
-                dir('cicd') {
-                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} -t ${DOCKER_IMAGE}:latest ."
-                }
-                sh "docker images ${DOCKER_IMAGE}"
-            }
-        }
-        
-        stage('验证镜像') {
-            steps {
-                echo '验证镜像...'
-                sh "docker inspect ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                sh """
-                    docker run --rm -d --name test-container -p ${APP_TEST_PORT}:8000 ${DOCKER_IMAGE}:${DOCKER_TAG} || true
-                    sleep 5
-                    curl -fsS http://localhost:${APP_TEST_PORT}/health || echo "健康检查失败"
-                    docker stop test-container || true
-                """
-            }
-        }
-        
-        stage('启动本地 Registry') {
-            when {
-                expression { env.DOCKER_REGISTRY == 'localhost:5000' }
-            }
-            steps {
-                echo '确保本地 Docker Registry 运行在 5000...'
-                sh '''
-                    if ! docker ps --format '{{.Names}}' | grep -q "^${REGISTRY_CONTAINER}$"; then
-                      if docker ps -a --format '{{.Names}}' | grep -q "^${REGISTRY_CONTAINER}$"; then
-                        docker rm -f ${REGISTRY_CONTAINER} || true
-                      fi
-                      docker run -d --restart=unless-stopped --name ${REGISTRY_CONTAINER} -p 5000:5000 registry:2
-                    fi
-                    curl -fsS http://localhost:5000/v2/ >/dev/null || true
-                '''
-            }
-        }
-        
-        stage('推送镜像（可选）') {
-            when {
-                expression { env.DOCKER_REGISTRY != null && env.DOCKER_REGISTRY != '' }
-            }
-            steps {
-                echo '推送镜像到 registry...'
-                sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}"
-                sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest"
-                sh "docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}"
-                sh "docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest"
-                sh "curl -fsS http://${DOCKER_REGISTRY}/v2/_catalog || true"
-            }
-        }
-        
+
+        // ========== 阶段 6：清理 ==========
         stage('清理') {
             steps {
-                echo '清理临时容器...'
+                echo '🧹 清理临时资源...'
                 sh '''
-                    docker ps -a --filter "name=test-container" -q | xargs -r docker rm -f || true
+                    docker rm -f test-vuln-target 2>/dev/null || true
                 '''
             }
         }
     }
-    
+
     post {
         success {
-            echo '构建成功！'
-            echo "镜像已构建: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-            echo "可以使用以下命令运行: docker run -p 8000:8000 ${DOCKER_IMAGE}:${DOCKER_TAG}"
+            echo """
+            =============================================
+            ✅ CI/CD 流水线执行成功！
+            =============================================
+            镜像名称: ${DOCKER_IMAGE}:${DOCKER_TAG}
+            Harbor:   ${HARBOR_IMAGE}:${DOCKER_TAG}
+
+            本地运行:
+              docker run -d -p 8000:8000 ${DOCKER_IMAGE}:${DOCKER_TAG}
+
+            从 Harbor 拉取:
+              docker pull ${HARBOR_IMAGE}:${DOCKER_TAG}
+            =============================================
+            """
         }
         failure {
-            echo '构建失败！'
+            echo '❌ 构建失败，请查看控制台输出排查原因。'
         }
         always {
-            echo '构建完成。'
-            // workspace 权限异常时，cleanWs 可能会抛 AccessDenied 干扰真正的失败原因
-            // 使用 sh 命令执行清理，避免触发 Script Security 审批
+            echo '流水线执行完毕。'
             sh 'rm -rf ${WORKSPACE}/* ${WORKSPACE}/.* 2>/dev/null || true'
         }
     }

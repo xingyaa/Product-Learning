@@ -218,7 +218,6 @@ k3s.yaml
 攻击图谱功能说明.md
 服务器装代理使用教程.md
 cicd/.dockerignore
-cicd/CICD_README.md
 cicd/DISABLE_SCRIPT_SECURITY.md
 cicd/Dockerfile
 cicd/JENKINS_SETUP.md

