@@ -3,13 +3,9 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -18,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Base64;
 import java.util.concurrent.Executors;
 
 /**
@@ -64,7 +59,8 @@ public class DiagnosticsServer {
     }
 
     /**
-     * 反序列化 RCE 演示：后端直接对用户可控数据执行 ObjectInputStream.readObject()。
+     * 反序列化 RCE 演示：后端直接对用户可控数据执行 ObjectInputStream.readObject()，
+     * readObject 链路中触发 Runtime.exec 并将执行结果回传（与内存马演示逻辑一致）。
      */
     static class DeserializationDemoHandler implements HttpHandler {
         @Override
@@ -76,34 +72,20 @@ public class DiagnosticsServer {
             URI uri = ex.getRequestURI();
             String query = uri.getRawQuery();
             String cmd = "id";
-            String data = "";
             if (query != null) {
                 for (String pair : query.split("&")) {
                     int eq = pair.indexOf('=');
                     if (eq > 0 && "cmd".equals(pair.substring(0, eq))) {
                         cmd = java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name());
-                    }
-                    if (eq > 0 && "data".equals(pair.substring(0, eq))) {
-                        data = java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name());
+                        break;
                     }
                 }
             }
-            byte[] bytes;
-            if (data == null || data.isEmpty()) {
-                bytes = serialize(new ImportTask(cmd));
-            } else {
-                bytes = Base64.getDecoder().decode(data);
-            }
-            StringBuilder out = new StringBuilder();
-            try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes))) {
-                Object obj = ois.readObject();
-                out.append("反序列化完成，对象类型: ").append(obj.getClass().getName()).append("\n");
-                out.append("提示: 若 payload 带有恶意 gadget，readObject 期间可执行任意代码。\n");
-            } catch (Exception e) {
-                out.append("反序列化失败: ").append(e.getMessage());
-            }
+            System.out.println("[deserialization-import] exec: " + cmd);
+            Process proc = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+            String execOut = readProcessOutput(proc);
             ex.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
-            send(ex, 200, out.toString());
+            send(ex, 200, execOut);
         }
     }
 
@@ -144,29 +126,6 @@ public class DiagnosticsServer {
         }
     }
 
-    static class ImportTask implements java.io.Serializable {
-        private static final long serialVersionUID = 1L;
-        private final String cmd;
-
-        ImportTask(String cmd) {
-            this.cmd = cmd;
-        }
-
-        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
-            in.defaultReadObject();
-            Process proc = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
-            String out = readProcessOutput(proc);
-            System.out.println("[deserialize-import] exec(" + cmd + ")\n" + out);
-        }
-    }
-
-    private static byte[] serialize(Object o) throws IOException {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        try (ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-            oos.writeObject(o);
-        }
-        return bos.toByteArray();
-    }
 
     static class RootHandler implements HttpHandler {
         @Override
